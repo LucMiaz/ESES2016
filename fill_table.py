@@ -8,6 +8,8 @@ import string
 import py2neo as pyneo
 from classes import *
 import copy
+import logging
+
 
 import urllib #for eniro api
 def finddata30(OLDPATH):
@@ -202,12 +204,19 @@ def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observ
     relationshipProps must contain a list of duples with the original label, the destinated label, unit
     
     """
+    
+
+    
+    
     fileName=folderName+fileName
+    logger.info('reading : %s', fileName)
     data=import_xlsx(xlsxFileName=fileName, headersRow=headersRow, sanitize=True)
     relProps=[]
     idLabel=sanitize_element(idLabel)
     for original, target, unit in relationshipProps:
         relProps.append([sanitize_element(original), sanitize_element(target), unit])
+    dataObjects=[]
+    logger.debug('Will look for: %s', relProps)
     for datum in data:
         props={}
         sprops={}
@@ -217,15 +226,24 @@ def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observ
             try:
                 props[target]=datum[original]
             except:
-                print("No "+original+" in "+ str(sampleId))
+                logger.info("No "+original+" in "+ str(sampleId))
             if unit:
                 units[target]=unit
         props["units"]=units
-        
+        logger.info('Matching sample ...')
         sample=match(label="Sample", code=sampleId)
         if len(sample)>0:
+            logger.info('Sample matched: %'+str(sample[0]))
             sample[0].add(**props)
-            Relationship(observationObj, "OF",sample[0], **props)
+            r=Relationship(observationObj, "OF",sample[0], **props)
+            dataObjects.append(r)
+        else:
+            logger.info('No samples found.')
+    
+    
+    # update records here
+    logger.info('Finished reading file')
+    return dataObjects
 
 def insert_Hg():
     folderName="37 HgDMA"
@@ -239,7 +257,7 @@ def insert_Hg():
     for filen in fileNames:
         print(filen)
         xlsxFileName= folderName+"/"+filen
-        relationshipProps=[["W boat","boatWg","g"],["W sample","sampleWg","g"],["W boat+ash","boatANDashWg","g"],["Comments","comments",None],["Hg ng","Hg","ng"],["Hg ng/g","Hg_","ng/g"],["LOI*","loi","%"],["Row","row",None]]
+        relationshipProps=[["W boat","boatWg","g"],["W sample","sampleWg","g"],["W boat+ash","boatANDashWg","g"],["Comments","comments",None],["Hg ng","Hg","ng"],["Hg ng/g","Hg_","ng/g"],["Row","row",None]]
         splitted=filen.split("_")
         date=splitted[1]
         group=splitted[2]
@@ -257,7 +275,18 @@ def insert_Hg():
                     if len(personObj)>0:
                         personObj=personObj[0]
                         Relationship(observationObj, "BY", personObj, group=group, date=date)
-            insert_data_from_file(xlsxFileName, relationshipProps,dma,observationObj, headersRow=0, idLabel="ID sample")
+            dataObj=insert_data_from_file(xlsxFileName, relationshipProps,dma,observationObj, headersRow=0, idLabel="ID sample")
+            for obj in dataObj:
+                if "boatWg" in obj.__dict__.keys() and "sampleWg" in obj.__dict__.keys() and "boatANDashWg" in obj.__dict__.keys():
+                    if obj.sampleWg>0:
+                        loi=1-(obj.boatANDashWg-obj.boatWg)/obj.sampleWg
+                        print(str(loi))
+                        obj.add(loi=loi)
+                        units=obj.units
+                        units['loi']=loi
+                        obj.add(units=units)
+                        obj.push()
+            
 
 
 def insert_water():
@@ -384,10 +413,97 @@ def insert_people():
             newone=Person(name=person[0],surname=person[1],email=person[2])
             People.append(newone)
     return(People)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@data30
+def insert_sediments(xlsxFileName="34 Sediment/Sediment_161006_compilation.xlsx",auto=False, rounding=3):
+    sheetNames=sheets_xlsx(xlsxFileName)
+    if auto:
+        sheetNum=1
+    else:
+        print("The file "+str(xlsxFileName)+" contains the following sheets :")
+        for i in range(0,len(sheetNames)):
+            print(str(i+1)+". "+sheetNames[i])
+        res=0
+        while res < 1 or res-1>len(sheetNames):
+            res=input("Select sheet name (use q to quit): ")
+            if res=="q":
+                res=1
+            else:
+                try:
+                    res=int(res)
+                except:
+                    print("insert only integers or q")
+                    res=0
+        sheetNum=res-1
+    data=import_xlsx(xlsxFileName=xlsxFileName,sheetNum=sheetNum,dataOnly=True, sanitize=False)
+    priorityraw=import_xlsx(xlsxFileName=xlsxFileName, sheetNum=sheetNum+1, dataOnly=True, sanitize=False)
+    priority=[]
+    for row in priority:
+        codepriority=row['Sample code']
+        res=codepriority.split(".")
+        if len(res)>1:
+            if res[0]=="E" and res[1]=="S":
+                priority.append(codepriority)
+    #todo add type of water in the sediment xlsx and import it
+    sediments=[]
+    for sample in data:
+        
+        labels={}
+        variables={}
+        units={}
+        labelsToVar=[
+                    ['Cermic vial weight + sample','ceramicAndSampleWg','g'],
+                    ['After burning','ceramicAfterBurnWg','g'],
+                    ['Weight for PF (g)','PFusedWg','g'],
+                    ['weight to get 1mg of organic matter [mh]','onemgOrgMatter','mg'],
+                    ['Ceramic vial weight','ceramicWg','g'],
+                    ['Wet-weight sample (g)','wetSampleWg','g'],
+                    ['Weight Aluminium + sample (g)','aluminiumAndSampleWg','g'],
+                    ['Weight Aluminium box (g)','aluminiumWg','g'],
+                    ['Dry weight sample (g)','drySampleWg','g'],
+                    ['DC [%]','dc','%'],
+                    ['Ceramic vial code','ceramicCode',''],
+                    ['Sample code','code','g'],
+                    ['Dry weight sample aluminium box+sample (g)','drySampleAndAluminiumWg','g'],
+                    ['Weight of plastic bottle (g)','plasticBottleWg','g']]
+        
+        unit='gram'
+        unitabb='g'
+        
+        #TODO waterType
+        prio=(sample['Sample code'] in priority)
+        seds=match(label="Sample", type="Sediment", code=sample['Sample code'])
+        if len(seds)>0:
+            seds=seds[0]
+        else:
+            seds=Sample(type="Sediment")
+        #seds.add(priority=prio)
+        for ltv in labelsToVar:
+            labels[ltv[0]]=ltv[1]
+            variables[ltv[1]]=ltv[0]
+            units[ltv[1]]=ltv[2]
+            valueofprop=sample[ltv[0]]
+            if isinstance(valueofprop,float):
+                valueofprop=round(valueofprop,rounding)
+            try:
+                propsToAdd={ltv[1]:valueofprop}
+            except:
+                print(ltv[0])
+            seds.add(**propsToAdd)
+        loi=1-(seds.drySampleAndAluminiumWg-seds.aluminiumWg)/(seds.aluminiumAndSampleWg-seds.aluminiumWg)
+        wc=(seds.wetSampleWg-seds.drySampleWg)/seds.wetSampleWg
+        units["loi"]="ratio of dw"
+        units['wc']='ratio of ww'
+        props2add={"units":units, "loi":loi, "wc":wc}
+        seds.add(**props2add)
+        #print(str(loi))
+        seds.push()
+        sediments.append(seds)
     
-
-
-
+    return(sediments)
 
 
     

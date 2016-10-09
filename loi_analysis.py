@@ -88,3 +88,6 @@ k=(sns.jointplot('loi', 'loiHg', data=groupSum, color="k")
             .plot_joint(sns.kdeplot, zorder=0, n_levels=6))
 plt.savefig('joinplot-loi-loiHg_grouped.pdf')
 
+data2=RUN_df('MATCH p=(n:Observation)-[r:OF]->(s:Sample) where n.type="Hg" return n.group as group, 1-(r.boatANDashWg-r.boatWg)/r.sampleWg as loiStar, s.loi as loi, s.code as code')
+
+

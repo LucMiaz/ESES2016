@@ -9,7 +9,7 @@ import py2neo as pyneo
 from classes import *
 import copy
 import urllib #for eniro api
-from fill_table import insert_sites, sheets_xlsx, import_xlsx, insert_people, data30, insert_ctd
+from fill_table import insert_sites, sheets_xlsx, import_xlsx, insert_people, data30, insert_ctd, insert_Hg, insert_sediments
 
 @data30
 def insert_codes():
@@ -19,9 +19,9 @@ def insert_codes():
         data=import_xlsx(fileName, sheetNum=sheet, sanitize=True)
         print(str(sheet))
         for datum in data:
-            if datum['Sample code']:
-                matched=match(label="Sample", code=datum['Sample code'])
-                datum['code']=datum['Sample code']
+            if datum['Sample_code']:
+                matched=match(label="Sample", code=datum['Sample_code'])
+                datum['code']=datum['Sample_code']
                 ppcode=None
                 if "ppcode" in datum.keys():
                     ppcode=datum['ppcode']
@@ -30,7 +30,7 @@ def insert_codes():
                 if "collectingTimeList" in datum.keys():
                     if isinstance(datum['collectingTimeList'], list):
                         datum['collectingTimeList']=[int(p) for p in (datum['collectingTimeList'].replace(' ','').split('+'))]
-                del datum['Sample code']
+                del datum['Sample_code']
                 #TODO add gestion of water bottles ! !!! two to three bottles per sample code !!!!
                 ppcode1=None
                 ppcode2=None
@@ -111,4 +111,5 @@ if __name__=="__main__":
         insert_codes()
         
         insert_ctd()
-        
+        insert_Hg()
+        insert_sediments()

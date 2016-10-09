@@ -2,23 +2,41 @@ import uuid
 from neo4j.v1 import GraphDatabase, basic_auth
 import ast
 from datetime import datetime
+import pandas as pd
 
+class with_session(object):
+    def __init__(self, url="bolt://hobby-keipgkicjildgbkelajdofnl.dbs.graphenedb.com:24786", user="ESES2016",pwd="JPTJ5EFwAW8C5AJm0vPM"):
+        self.url=url
+        self.user=user
+        self.pwd=pwd
+        self.sessionNeo4j=None
 
-"""
-def with_session(func,url="bolt://hobby-keipgkicjildgbkelajdofnl.dbs.graphenedb.com:24786", user="ESES2016",pwd="JPTJ5EFwAW8C5AJm0vPM", *args, **kwargs):
-    def operate(*args, **kwargs):
-        driver = GraphDatabase.driver(url, auth=basic_auth(user,pwd))
-        session=driver.session()
-        kwargs["session"]=session 
-        result=func(*args, **kwargs)
-        session.close()
-        return result
-    return operate
+           
+    def __call__(self, func):
+        def operate(*args, **kwargs):
+            try:
+                kwargs["sessionNeo4j"]=self.sessionNeo4j
+                return func(*args, **kwargs)
+            except:
+                kwargs["sessionNeo4j"]=sessionNeo4j =GraphDatabase.driver(self.url, auth=basic_auth(self.user,self.pwd)).session()
+                result=func(*args, **kwargs)
+                sessionNeo4j.close()
+                return result
+        return operate
+
+        
+    def __enter__(self):
+        print("creating session")
+        self.sessionNeo4j = GraphDatabase.driver(self.url, auth=basic_auth(self.user,self.pwd)).session()
+        self.active=True
     
-@session
-def RUN(command,session):
-    result=session.run(command)
-    return(result)
+    def __exit__(self, ex, ft, k):
+        print("closing session")
+        self.sessionNeo4j.close()
+        self.active=False
+
+    
+
     
 """
 
@@ -55,13 +73,21 @@ class with_session(object):
         print("closing session")
         self.sessionNeo4j.close()
         self.active=False
-        
+"""        
 @with_session()
 def RUN(command,sessionNeo4j):
     return sessionNeo4j.run(command)
-    
-   
 
+@with_session()
+def RUN_df(command, sessionNeo4j):
+    data=sessionNeo4j.run(command)
+    df = pd.DataFrame(columns=data.keys())
+    count=0
+    for datum in data:
+        df.loc[count]=datum
+        count+=1
+    return(df)
+ 
 def node(func):
     def init_wrapper(self, *args, **kwargs):
         func(self, *args, **kwargs)
@@ -156,7 +182,7 @@ class Relationship(object):
         createCommand=" CREATE (n)-[:"+self.label+dictToStr(self.props)+"]->(m)"
         #print(createCommand)
         RUN(matchCommand+createCommand)
-    
+
     def push(self):
         matchCommand="MATCH (n:"+self.n1.element_type+") WHERE n.id= '"+self.n1.id+"' MATCH (m:"+self.n2.element_type+") WHERE m.id='"+self.n2.id+"' MATCH (n)-[R:"+self.label+"]->(m)"
         setCommand="SET R="+dictToStr(self.props)
