@@ -24,34 +24,38 @@ def finddata30(OLDPATH):
 def data30(func, *args, **kwargs):
     def changePath(*args, **kwargs):
         OLDPATH=Path(os.getcwd())
-        newPath=finddata30(OLDPATH)
-        
+        try:
+            newPath=finddata30(OLDPATH)
+        except IndexError:
+            OLDPATH=Path("/Users/Shared/Dropbox/ESES Course 2016/")
+            newPath=finddata30(OLDPATH)
         #print(newPath)
         os.chdir(newPath.as_posix())
         ret=func(*args,**kwargs)
         os.chdir(OLDPATH.as_posix())
         return(ret)
     return changePath
-
+def sanitize_element(element):
+    ele_=element
+    ele_=ele_.replace(" ","_")
+    ele_=ele_.replace("+","AND")
+    ele_=ele_.replace("/","_")
+    ele_=ele_.replace("*","STAR")
+    ele_=ele_.replace("%","perc")
+    ele_=ele_.replace("[","_")
+    ele_=ele_.replace("]","_")
+    ele_=ele_.replace("(","_")
+    ele_=ele_.replace(")","_")
+    ele_=ele_.replace("-","__")
+    return(ele_)
 def sanitize_headers(headers):
     newheaders=[]
     for ele in headers:
         if ele:
-            ele_=ele
-            ele_=ele_.replace(" ","_")
-            ele_=ele_.replace("+","AND")
-            ele_=ele_.replace("/","_")
-            ele_=ele_.replace("*","STAR")
-            ele_=ele_.replace("%","perc")
-            ele_=ele_.replace("[","_")
-            ele_=ele_.replace("]","_")
-            ele_=ele_.replace("(","_")
-            ele_=ele_.replace(")","_")
-            ele_=ele_.replace("-","__")
-            newheaders.append(ele_)
+            newheaders.append(sanitize_element(ele))
         else:
             newheaders.append(ele)
-    return headers
+    return(newheaders)
     
 @data30
 def import_xlsx(xlsxFileName, sheetNum=0, header=True, noBlankTitles=True, onlyHeaders=None,dataOnly=True, headersRow=0, sanitize=True):
@@ -73,6 +77,7 @@ def import_xlsx(xlsxFileName, sheetNum=0, header=True, noBlankTitles=True, onlyH
     count=1
     for i in copyheaders:
         if last==i:
+            
             headers[headers.index(i)]=str(i)+str(count)
             count+=1
         else:
@@ -80,7 +85,6 @@ def import_xlsx(xlsxFileName, sheetNum=0, header=True, noBlankTitles=True, onlyH
         last=i
     if sanitize:
         headers=sanitize_headers(headers)
-
     for row in rows:
         rowD={}
         disposableHeaders=headers.copy()
@@ -133,7 +137,8 @@ def sanitize_sample_code(debut):
             debut=None  
     return debut
 
-def inset_PFxx():
+def insert_PFxx():
+    
     obs=match(label="Observation", type="PFxx", date=date)
     if len(obs)>0:
         obs=obs[0]
@@ -146,7 +151,7 @@ def inset_PFxx():
         lc=Instrument(name="LC")
     
 
-def insert_PFxx(fileName, instrumentObj, observationObj, ppcode=None, folderName="", idCode="sample ID"):
+def fill_PFxx(fileName, instrumentObj, observationObj, ppcode=None, folderName="", idCode="sample ID"):
     fileName=folderName+fileName
     idCode=sanitize_headers([idCode])[0]
     data=import_xlsx(xlsxFileName=fileName, headersRow=1, sanitize=True)
@@ -189,8 +194,8 @@ def insert_PFxx(fileName, instrumentObj, observationObj, ppcode=None, folderName
             Relationship(val,"TAKEN_IN",site[0])
         Relationship(val,"MEASURE_OF",obs)
 
-@data30
-def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", ppcode=[], date=None):
+
+def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", date=None):
     """
     indicate how to find the sample id
     indicate how to find the ppcode
@@ -198,22 +203,62 @@ def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observ
     
     """
     fileName=folderName+fileName
-    data=import_xlsx(xlsxFileName=fileName, headersRow=1, sanitize=True)
-    relProps=sanitize_headers(relationshipProps)
+    data=import_xlsx(xlsxFileName=fileName, headersRow=headersRow, sanitize=True)
+    relProps=[]
+    idLabel=sanitize_element(idLabel)
+    for original, target, unit in relationshipProps:
+        relProps.append([sanitize_element(original), sanitize_element(target), unit])
     for datum in data:
         props={}
         sprops={}
         units={}
-        for original, target in relProps:
-            props[target]=datum[original]
         sampleId=datum[idLabel]
-        pp=[match(label="Person",initials=(initialsPP.lower().replace(" ",""))) for initialsPP in ppcode]
-        sample=match(label="Sample", code=sampleID)
+        for original, target,unit in relProps:
+            try:
+                props[target]=datum[original]
+            except:
+                print("No "+original+" in "+ str(sampleId))
+            if unit:
+                units[target]=unit
+        props["units"]=units
+        
+        sample=match(label="Sample", code=sampleId)
         if len(sample)>0:
-            sample.add(**props)
-        for person in pp:
-            if len(person)>0:
-                Relationship(observationObj, "OF",sample, **props)
+            sample[0].add(**props)
+            Relationship(observationObj, "OF",sample[0], **props)
+
+def insert_Hg():
+    folderName="37 HgDMA"
+    fileNames=["HgDMA_160920_ESES1_sed+zoo prel.xlsx","HgDMA_160922_ESES2_sed+zoo prel.xlsx","HgDMA_160928_ESES_fish+sed prel2.xlsx","HgDMA_160929_ESES_sedFD1 prel.xlsx","HgDMA_160930_ESES_sedFD2 prel.xlsx"]
+    dma=match(label="Instrument",name="DMA-80")
+    if len(dma)>0:
+        dma=dma[0]
+    else:
+        dma=Instrument(name="DMA-80",manufacturer="Milestones Srl", website="http://www.milestonesrl.com/en/mercury/dma-80/features.html")
+    groups={"ESES1":["lumi","faba","jeis","cagr","lojs","giho"],"ESES2":["erwi","mamä","idbo","mahe","laan","jojo"]}
+    for filen in fileNames:
+        print(filen)
+        xlsxFileName= folderName+"/"+filen
+        relationshipProps=[["W boat","boatWg","g"],["W sample","sampleWg","g"],["W boat+ash","boatANDashWg","g"],["Comments","comments",None],["Hg ng","Hg","ng"],["Hg ng/g","Hg_","ng/g"],["LOI*","loi","%"],["Row","row",None]]
+        splitted=filen.split("_")
+        date=splitted[1]
+        group=splitted[2]
+        name=splitted[3]
+        observationObj=match(label="Observation", name=name, date=date)
+        if len(observationObj)>0:
+            observationObj=observationObj[0]
+        else:
+            observationObj=Observation(type="Hg", name=name, date=date, group=group)
+            Relationship(observationObj,"WITH",dma)
+            if group in groups.keys():
+                pp=groups[group]
+                for person in pp:
+                    personObj=match(label="Person", initials=person)
+                    if len(personObj)>0:
+                        personObj=personObj[0]
+                        Relationship(observationObj, "BY", personObj, group=group, date=date)
+            insert_data_from_file(xlsxFileName, relationshipProps,dma,observationObj, headersRow=0, idLabel="ID sample")
+
 
 def insert_water():
     filename="33 Water/161004_Water compilation_MH.xlsx"
