@@ -135,8 +135,11 @@ def sanitize_sample_code(debut):
             last=debut[-1]
             debut=debut[:-1]+"0"+last
             print("Changed to "+ debut)
+        elif not debut:
+            debut=None
         else:
-            debut=None  
+            pass
+              
     return debut
 
 def insert_PFxx():
@@ -197,7 +200,7 @@ def fill_PFxx(fileName, instrumentObj, observationObj, ppcode=None, folderName="
         Relationship(val,"MEASURE_OF",obs)
 
 
-def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", date=None):
+def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", date=None, sampleType="Blank"):
     """
     indicate how to find the sample id
     indicate how to find the ppcode
@@ -237,7 +240,15 @@ def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observ
             sample[0].add(**props)
             r=Relationship(observationObj, "OF",sample[0], **props)
             dataObjects.append(r)
+            sample=sample[0]
         else:
+            if sampleId=="SE3":
+                sampleType="Sediment"
+            elif sampleId=="tom" or sampleId=="Tom":
+                sampleType="Blank"
+            sample=Sample(code=sampleId, type=sampleType)
+            r=Relationship(observationObj, "OF",sample, **props)
+            dataObjects.append(r)
             logger.info('No samples found.')
     
     
@@ -246,14 +257,15 @@ def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observ
     return dataObjects
 
 def insert_Hg():
-    folderName="37 HgDMA"
-    fileNames=["HgDMA_160920_ESES1_sed+zoo prel.xlsx","HgDMA_160922_ESES2_sed+zoo prel.xlsx","HgDMA_160928_ESES_fish+sed prel2.xlsx","HgDMA_160929_ESES_sedFD1 prel.xlsx","HgDMA_160930_ESES_sedFD2 prel.xlsx"]
+    folderName="zzz_37 HgDMA_treated"
+    fileNames=["HgDMA_160920_ESES1_sed(1)OD+zoo prel MaMe.xlsx","HgDMA_160922_ESES2_sed(1)OD+zoo prel MaMe.xlsx","HgDMA_160928_ESES_fish+sed(1)ODFD prel2 MaMe.xlsx","HgDMA_160929_ESES_sed(1a)FD prel MaMe.xlsx","HgDMA_160930_ESES_sed(1b)FD prel MaMe.xlsx","HgDMA_161007_ESES3_sed(2)FD prel MaMe.xlsx"]
+    #fileNames=["HgDMA_161007_ESES_sed(2)FD prel MaMe.xlsx"]
     dma=match(label="Instrument",name="DMA-80")
     if len(dma)>0:
         dma=dma[0]
     else:
         dma=Instrument(name="DMA-80",manufacturer="Milestones Srl", website="http://www.milestonesrl.com/en/mercury/dma-80/features.html")
-    groups={"ESES1":["lumi","faba","jeis","cagr","lojs","giho"],"ESES2":["erwi","mamä","idbo","mahe","laan","jojo"]}
+    groups={"ESES1":["lumi","faba","jeis","cagr","lojs","giho"],"ESES2":["erwi","mamä","idbo","mahe","laan","jojo"],"ESES3":["mahe"]}
     for filen in fileNames:
         print(filen)
         xlsxFileName= folderName+"/"+filen
@@ -278,6 +290,7 @@ def insert_Hg():
             dataObj=insert_data_from_file(xlsxFileName, relationshipProps,dma,observationObj, headersRow=0, idLabel="ID sample")
             for obj in dataObj:
                 if "boatWg" in obj.__dict__.keys() and "sampleWg" in obj.__dict__.keys() and "boatANDashWg" in obj.__dict__.keys():
+                #if sampleId in obj.__dict__.keys():
                     if obj.sampleWg>0:
                         loi=1-(obj.boatANDashWg-obj.boatWg)/obj.sampleWg
                         print(str(loi))
@@ -287,13 +300,13 @@ def insert_Hg():
                         obj.add(units=units)
                         obj.push()
             
-
+"""
 
 def insert_water():
-    filename="33 Water/161004_Water compilation_MH.xlsx"
-    sheets=[1,2,3]
+    filename="33 Water/161010_Water compilation working sheet_CaGr.xlsx"
+    turbidity=import_xlsx(filename, 
     
-    
+    """
 
 @data30
 def insert_sites(xlsxFileName="31 Sites/Site description (Sunbeam).xlsx"):
@@ -307,7 +320,7 @@ def insert_sites(xlsxFileName="31 Sites/Site description (Sunbeam).xlsx"):
             lat=float(latraw[2:4])+float(latraw[6:12])/60
             lon=float(lonraw[3:5])+float(lonraw[7:13])/60
             
-            siteDict={"name":site["Site name"], "code":site["Site"], "letter":letters.pop(0), "lat":round(lat,6), "lon":round(lon,6),"temperature":site["Temperature (°C)"], "depth":site["Depth (m)"],"region":site["Region"], "eniroDepth":site["Eniro depth (m)"]}
+            siteDict={"name":site["Site name"], "code":site["Site"], "letter":letters.pop(0), "lat":round(lat,6), "lon":round(lon,6),"temperature":site["Temperature (°C)"], "depth":site["Depth (m)"],"region":site["Region"], "eniroDepth":site["Eniro depth (m)"], "regionSed":site['regionSediments'],"regionWater":site['regionWater']}
             matched=match(label="Site", code=site["Site"], letter=siteDict['letter'], lat=siteDict['lat'], lon=siteDict['lon'])
             if len(matched)>0:
                 sitesObj.append(matched[0])
@@ -418,7 +431,7 @@ logger = logging.getLogger(__name__)
 
 
 @data30
-def insert_sediments(xlsxFileName="34 Sediment/Sediment_161006_compilation.xlsx",auto=False, rounding=3):
+def insert_sediments(xlsxFileName="34 Sediment/Sediment_161010_compilation_lumi.xlsx",auto=False, rounding=3):
     sheetNames=sheets_xlsx(xlsxFileName)
     if auto:
         sheetNum=1
@@ -504,6 +517,7 @@ def insert_sediments(xlsxFileName="34 Sediment/Sediment_161006_compilation.xlsx"
         sediments.append(seds)
     
     return(sediments)
+
 
 
     

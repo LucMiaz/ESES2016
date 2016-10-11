@@ -4,6 +4,7 @@ import ast
 from datetime import datetime
 import pandas as pd
 
+
 class with_session(object):
     def __init__(self, url="bolt://hobby-keipgkicjildgbkelajdofnl.dbs.graphenedb.com:24786", user="ESES2016",pwd="JPTJ5EFwAW8C5AJm0vPM"):
         self.url=url
@@ -73,7 +74,8 @@ class with_session(object):
         print("closing session")
         self.sessionNeo4j.close()
         self.active=False
-"""        
+       """
+       
 @with_session()
 def RUN(command,sessionNeo4j):
     return sessionNeo4j.run(command)
@@ -82,9 +84,10 @@ def RUN(command,sessionNeo4j):
 def RUN_df(command, sessionNeo4j):
     data=sessionNeo4j.run(command)
     df = pd.DataFrame(columns=data.keys())
+    keys=data.keys()
     count=0
     for datum in data:
-        df.loc[count]=datum
+        df.loc[count]=[datum[key] for key in keys]
         count+=1
     return(df)
  
