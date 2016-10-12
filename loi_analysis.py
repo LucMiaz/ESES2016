@@ -92,10 +92,13 @@ plt.savefig('joinplot-loi-loiHg_grouped.pdf')
 
 """
 writer = pd.ExcelWriter('statistics_161010_description of Hg by region_lumi.xlsx', engine='xlsxwriter')
-data=RUN_df('MATCH p=(n:Observation)-[r:OF]->(s:Sample)-[:FROM]->(i:Site) where n.type="Hg" AND NOT r.Hg_="None" AND s.type="Sediment" return n.group as group, r.Hg_ as hg, s.code as code, r.sampleWg as weight, i.regionSed as region, 1-(r.boatANDashWg-r.boatWg)/r.sampleWg as loi, i.code as site, s.depth as depth, i.letter+": "+i.code as letter')
 
 
+
+
+data=RUN_df('MATCH p=(n:Observation)-[r:OF]->(s:Sample)-[:FROM]->(i:Site) where n.type="Hg" AND NOT r.Hg_="None" AND s.type="Sediment" return n.group as group, r.Hg_ as hg, s.code as code, r.sampleWg as weight, i.regionSed as region, 1-(r.boatANDashWg-r.boatWg)/r.sampleWg as loiStar, i.code as site, s.depth as depth, i.letter+": "+i.code as letter')
 """
+
 df = data.groupby('code').agg(
     {'hg':{'sum':'sum','mean':'mean', 'std':'std','median':'median'}})
 re=df.loc[df['hg']['std']/df['hg']['mean']>0.01]
@@ -114,6 +117,7 @@ dfarea.to_excel(writer,'by region')
 dfhg.to_excel(writer,'by code')
 
 """
+
 def depth_sep(depth):
     if depth=="01+02" or depth=="00+03" or depth <4:
         return "top"
@@ -129,18 +133,46 @@ for datum in data['depth']:
 data['depthCat']=depthcat
         
 
-df = data.groupby(['code', 'site', 'depth']).aggregate({'hg':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov},'loi':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov}})
+df = data.groupby(['code', 'site', 'depth']).aggregate({'hg':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov},'loiStar':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov}})
 df.to_excel(writer,'all samples')
-dfregions=data.groupby(['site']).aggregate({'hg':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov},'loi':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov}})
+dfregions=data.groupby(['site']).aggregate({'hg':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov},'loiStar':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov}})
 dfregions.to_excel(writer,'by site')
-dfdepthsite = data.groupby(['site','depthCat']).aggregate({'hg':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov},'loi':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov}})
+dfdepthsite = data.groupby(['site','depthCat']).aggregate({'hg':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov},'loiStar':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov}})
 dfdepthsite.to_excel(writer,"by site-depth")
-dfdepthsite = data.groupby(['depthCat','region']).aggregate({'hg':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov},'loi':{'mean':'mean','std':'std','median':'median','max':'max','min':'min','count':'count','cov':np.cov}})
-dfdepthsite.to_excel(writer,"by region-depth")
+
+dfcode = data.groupby(['code','depthCat','region'], as_index=False).mean()
+dfdepthsite = dfcode.groupby(['depthCat','region']).aggregate({'hg':['mean','median','std','max','min','count'],'loiStar':['mean','median','std','max','min','count']})
+dfdepthsite.to_excel(writer,"Hg_all")
+
+levelsregions=["Ref Mälaren", "Mälaren", "Stockholm", "Stockholm 2", "Baltic Sea", "Ref Baltic Sea"]
+
+data=RUN_df('MATCH p=(n:Observation)-[r:OF]->(s:Sample)-[:FROM]->(i:Site) where n.type="Hg" AND NOT r.Hg_="None" AND s.type="Sediment" AND r.drying="OD" return n.group as group, r.Hg_ as hg, s.code as code, r.sampleWg as weight, i.regionSed as region, 1-(r.boatANDashWg-r.boatWg)/r.sampleWg as loiStar, i.code as site, s.depth as depth, i.letter+": "+i.code as letter, 1-(s.ceramicAndSampleWg - s.ceramicAfterBurnWg)/(s.ceramicAndSampleWg - s.ceramicWg) as loi, 1-(s.drySampleWg/s.wetSampleWg) as wc')
+depthcat=[]
+for datum in data['depth']:
+    depthcat.append(depth_sep(datum))
+
+data['depthCat']=depthcat
+
+dfcode = data.groupby(['code','depthCat','region'],as_index=False).mean()
+dfdepthsite = dfcode.groupby(['depthCat','region']).aggregate({'loi':['mean','median','std','max','min','count'],'wc':['mean','median','std','max','min','count'],'hg':['mean','median','std','max','min','count'],'loiStar':['mean','median','std','max','min','count']})
+dfdepthsite.to_excel(writer,"Hg_OD")
+
+data=RUN_df('MATCH p=(n:Observation)-[r:OF]->(s:Sample)-[:FROM]->(i:Site) where n.type="Hg" AND NOT r.Hg_="None" AND s.type="Sediment" AND r.drying ="FD" return n.group as group, r.Hg_ as hg, s.code as code, r.sampleWg as weight, i.regionSed as region, 1-(r.boatANDashWg-r.boatWg)/r.sampleWg as loiStar, i.code as site, s.depth as depth, i.letter+": "+i.code as letter')
+depthcat=[]
+for datum in data['depth']:
+    depthcat.append(depth_sep(datum))
+
+data['depthCat']=depthcat
+
+dfcode = data.groupby(['code','depthCat','region'], as_index=False).mean()
+dfdepthsite = dfcode.groupby(['depthCat','region']).aggregate({'hg':['mean','median','std','max','min','count'],'loiStar':['mean','median','std','max','min','count']})
+dfdepthsite.to_excel(writer,"Hg_FD")
+
+
 
 dfds=data.groupby(['letter','depthCat']).aggregate({'hg':{'mean':'mean'}})
-
-colors = {'Mälaren':"#66c2a5", 'Baltic Sea':"#fc8d62", 'Stockholm':"#8da0cb"}
+"""
+colors = {'Mälaren':"#66c2a5",'Ref Mälaren':"#66c2a5", 'Baltic Sea':"#fc8d62", 'Ref Baltic Sea':"#fc8d62", 'Stockholm':"#8da0cb",'Stockholm 2':"#8da0cb"}
 
 regioncolors=[colors[d] for d in data['region']]
 
@@ -153,6 +185,8 @@ data.boxplot(['hg'], by=['depth'])
 dfpivot= data.pivot_table(values=["hg"], index=["site","depth"], aggfunc=np.mean).unstack()
 dfds.unstack().plot(kind="bar",color=["#66c2a5","#fc8d62","#8da0cb","#e78ac3"], width=1, logy=True,legend=True)
 plt.savefig('bardept1h.pdf')
+"""
+
 writer.save()
 writer.close()
 

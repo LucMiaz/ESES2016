@@ -9,7 +9,7 @@ import py2neo as pyneo
 from classes import *
 import copy
 import logging
-
+import re
 
 import urllib #for eniro api
 def finddata30(OLDPATH):
@@ -95,6 +95,8 @@ def import_xlsx(xlsxFileName, sheetNum=0, header=True, noBlankTitles=True, onlyH
             if len(disposableHeaders)>0:
                 if disposableHeaders[0]:
                     rowD[disposableHeaders.pop(0)] = cell.value
+                else:
+                    disposableHeaders.pop(0)
         copyRow=copy.copy(rowD)
         
         imported.append(rowD)
@@ -117,6 +119,7 @@ def write_xlsx(xlsxFileName, data):
     wb.save(xlsxFileName)
 
 def sanitize_sample_code(debut):
+    original=debut
     if debut:
         if "+" in debut:
             divided=debut.split(".")#split the string around dots
@@ -130,90 +133,110 @@ def sanitize_sample_code(debut):
                 plusret.append(plus)#adds it to the list of pluses
             last= "+".join(plusret)#join the plus again
             debut=".".join(start)+"."+last#joint the start and the end.
-            print("Changed to "+ debut)
+            print(original +" changed to "+ debut)
         elif len(debut.split(".")[-1])==1:
             last=debut[-1]
             debut=debut[:-1]+"0"+last
-            print("Changed to "+ debut)
+            print(original + " changed to "+ debut)
         elif not debut:
             debut=None
-        else:
-            pass
+        else:##################################################################<---------------<-<-<-<-<-<
+            debut=None
               
     return debut
 
 def insert_PFxx():
     
-    obs=match(label="Observation", type="PFxx", date=date)
-    if len(obs)>0:
-        obs=obs[0]
-    else:
-        obs=Observation(type="PFxx", date=date)
     lc=match(label="Instrument", name="LC")
     if len(lc)>0:
         lc=lc[0]
     else:
         lc=Instrument(name="LC")
+    folderName="39 PFxx"
+    fileName="PFXX_161011_compilation_FaBa.xlsx"
+    fill_PFxx(fileName=fileName, folderName=folderName, instrumentObj=lc) 
     
 
-def fill_PFxx(fileName, instrumentObj, observationObj, ppcode=None, folderName="", idCode="sample ID"):
-    fileName=folderName+fileName
-    idCode=sanitize_headers([idCode])[0]
+def fill_PFxx(fileName, instrumentObj, folderName="", idCode="sample ID", date="2016-09-23"):
+    fileName=folderName+"/"+fileName
+    idCode=sanitize_element(idCode)
     data=import_xlsx(xlsxFileName=fileName, headersRow=1, sanitize=True)
+    date="2016-09-20"
     for row in data:
         ppcode=row['operator'].split(",")
+        ppcodecopy=[]
+        for pp in ppcode:
+            ppcodecopy.append(pp.lower().replace(" ",""))
+        ppcode=ppcodecopy
         del row['operator']
-        
-        
+        obs=match(label="Observation", type="PFxx", ppcode=str(ppcode))
+        if len(obs)>0:
+            obs=obs[0]
+        else:
+            obs=Observation(type='PFxx', ppcode=str(ppcode),date=date)
+            for pp in ppcode:
+                person=match(label="Person", initials=pp)
+                if len(person)>0:
+                    Relationship(obs, "BY", person[0])
+                else:
+                    print(pp + " not found")
+        units="ng/g"
         sampleId=row[idCode]
         sampleId=sanitize_sample_code(sampleId)
         if not sampleId:
-            sample=Sample(type='Sediment',site='Archive',code=row[idCode])
-            siteCode="Archive"
+            sampleId=row[idCode]
+            patternBlank= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
+            patternControl= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
+            if re.match(patternBlank, sampleId):
+                sample=match(label="Blank", site="Blank", code=sampleId)
+                if sample:
+                    if len(sample)>0:
+                        sample=sample[0]
+                else:
+                    sample=Sample(type="Blank", site="Blank", code=sampleId)
+                    site=match(label="Site",code="Blank")[0]
+                    Relationship(sample,"FROM", site)
+                siteCode="Blank"
+                typeSample="Blank"
+            elif re.match(patternControl, sampleId):
+                sample=match(label="Control", site="Control", code=sampleId)
+                if sample:
+                    if len(sample)>0:
+                        sample=sample[0]
+                else:
+                    sample=Sample(type="Control", site="Control", code=sampleId)
+                    site=match(label="Site",code="Control")[0]
+                    Relationship(sample,"FROM", site)
+                siteCode="Control"
+                typeSample="Control"
+            else:
+                sample=Sample(type='Sediment',site='Archive',code=row[idCode])
+                site=match(label="Site",code="Archive")[0]
+                Relationship(sample,"FROM", site)
+                siteCode="Archive"
         elif len(sampleId.split("."))>1:
             sample=match(label='Sample', code=sampleId)[0]
             siteCode=int(sampleId.split(".")[2])
         else:
-            typeSample=sampleId.split(" ")[0].lower()
-            siteCode=None
-            if typeSample =="control":
-                sample=Sample(type="Sediment",typeSample="Control",code=sampleId)
-            elif typeSample=="blank" or typeSample == "tom":
-                sample=Sample(type="Sediment",typeSample="Blank", code=sampleId)
-            else:
-                print("ERRoR")
-                sample=Sample(type="ERROR", code=sampleId)
-        del row['idCode']
-        val=Value(type="PFxx",**row)
-        Relationship(val,"MEASURE_ON",sample)
-        for pp in ppcode:
-            pp=pp.replace(" ","")
-            ppObj=match(label="Person",initials=pp.lower())
-            if len(ppObj)>0:
-                Relationship(val,"TAKEN_BY", ppObj[0])
-            else:
-                print("Person not found "+pp+" for sample "+sampleId)
-        Relationship(val,"TAKEN_WITH",lc)
-        site=match(label="Site", code=siteCode)
-        if len(site)>0:
-            Relationship(val,"TAKEN_IN",site[0])
-        Relationship(val,"MEASURE_OF",obs)
+            print("ERRoR")
+            sample=Sample(type="ERROR", code=sampleId)
+        del row[idCode]
+        row['type']="PFxx"
+        row['units']=units
+        Relationship(obs,"OF",sample,**row)
 
 
-def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", date=None, sampleType="Blank"):
+def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", date=None, sheetNum=0):
     """
     indicate how to find the sample id
     indicate how to find the ppcode
     relationshipProps must contain a list of duples with the original label, the destinated label, unit
     
     """
-    
 
-    
-    
     fileName=folderName+fileName
     logger.info('reading : %s', fileName)
-    data=import_xlsx(xlsxFileName=fileName, headersRow=headersRow, sanitize=True)
+    data=import_xlsx(xlsxFileName=fileName, headersRow=headersRow, sanitize=True, sheetNum=sheetNum)
     relProps=[]
     idLabel=sanitize_element(idLabel)
     for original, target, unit in relationshipProps:
@@ -244,12 +267,28 @@ def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observ
         else:
             if sampleId=="SE3":
                 sampleType="Sediment"
-            elif sampleId=="tom" or sampleId=="Tom":
+            elif sampleId=="tom" or sampleId=="Tom" or sampleId=="Blank" or sampleId=="blank":
                 sampleType="Blank"
-            sample=Sample(code=sampleId, type=sampleType)
-            r=Relationship(observationObj, "OF",sample, **props)
-            dataObjects.append(r)
-            logger.info('No samples found.')
+            elif sampleId== None:
+                sampleType=None
+            elif len(sampleId.split('.'))>1:
+                if sampleId.split('.')[1]=="S":
+                    sampleType="Sediment"
+                elif sampleId.split('.')[1]=="W":
+                    sampleType="Water"
+                elif sampleId.split('.')[1]=="Z":
+                    sampleType="Zoo"
+                elif sampleId.split('.')[1]=="F":
+                    sampleType="Fish"
+                else:
+                    sampleType="Unknown"
+            else:
+                sampleType="Sediment"
+            if sampleType:
+                sample=Sample(code=sampleId, type=sampleType)
+                r=Relationship(observationObj, "OF",sample, **props)
+                dataObjects.append(r)
+                logger.info('No samples found.')
     
     
     # update records here
@@ -265,29 +304,40 @@ def insert_Hg():
         dma=dma[0]
     else:
         dma=Instrument(name="DMA-80",manufacturer="Milestones Srl", website="http://www.milestonesrl.com/en/mercury/dma-80/features.html")
-    groups={"ESES1":["lumi","faba","jeis","cagr","lojs","giho"],"ESES2":["erwi","mamä","idbo","mahe","laan","jojo"],"ESES3":["mahe"]}
+    groups={"ESES1":["lumi","faba","jeis","cagr","lojs","giho"],"ESES2":["erwi","mamä","idbo","mahe","laan","jojo"],"ESES3":["mahe"], "ESES4":["lumi","faba"], "ESES5":["lumi","faba","mahe"], "ESES6":[]}
     for filen in fileNames:
         print(filen)
         xlsxFileName= folderName+"/"+filen
-        relationshipProps=[["W boat","boatWg","g"],["W sample","sampleWg","g"],["W boat+ash","boatANDashWg","g"],["Comments","comments",None],["Hg ng","Hg","ng"],["Hg ng/g","Hg_","ng/g"],["Row","row",None]]
+        relationshipProps=[["W boat","boatWg","g"],["W sample","sampleWg","g"],["W boat+ash","boatANDashWg","g"],["Comments","comments",None],["Hg ng","Hg","ng"],["Hg ng/g","Hg_","ng/g"],["Row","row",None],['drying','drying',None],['error','error',None]]
         splitted=filen.split("_")
         date=splitted[1]
         group=splitted[2]
         name=splitted[3]
+        d=import_xlsx(xlsxFileName)
+        try:
+            ppcodes=d[0]['ppcode']
+        except:
+            if group in groups.keys():
+                ppcodes=groups[group]
+            else:
+                ppcodes=None
+                print("No ppcodes for "+xlsxFileName)    
+            
+        
         observationObj=match(label="Observation", name=name, date=date)
         if len(observationObj)>0:
             observationObj=observationObj[0]
         else:
             observationObj=Observation(type="Hg", name=name, date=date, group=group)
             Relationship(observationObj,"WITH",dma)
-            if group in groups.keys():
-                pp=groups[group]
-                for person in pp:
-                    personObj=match(label="Person", initials=person)
+            if ppcodes:
+                for person in ppcodes:
+                    personObj=match(label="Person", initials=person.lower().replace(" ",""))
                     if len(personObj)>0:
                         personObj=personObj[0]
                         Relationship(observationObj, "BY", personObj, group=group, date=date)
-            dataObj=insert_data_from_file(xlsxFileName, relationshipProps,dma,observationObj, headersRow=0, idLabel="ID sample")
+        dataObj=insert_data_from_file(xlsxFileName, relationshipProps,dma,observationObj, headersRow=0, idLabel="ID sample")
+        if len(dataObj)>0:
             for obj in dataObj:
                 if "boatWg" in obj.__dict__.keys() and "sampleWg" in obj.__dict__.keys() and "boatANDashWg" in obj.__dict__.keys():
                 #if sampleId in obj.__dict__.keys():
@@ -300,14 +350,13 @@ def insert_Hg():
                         obj.add(units=units)
                         obj.push()
             
+#TODO
 """
-
 def insert_water():
     filename="33 Water/161010_Water compilation working sheet_CaGr.xlsx"
     turbidity=import_xlsx(filename, 
+"""
     
-    """
-
 @data30
 def insert_sites(xlsxFileName="31 Sites/Site description (Sunbeam).xlsx"):
     data=import_xlsx(xlsxFileName=xlsxFileName, sheetNum=2, sanitize=False, headersRow=1)
@@ -453,13 +502,21 @@ def insert_sediments(xlsxFileName="34 Sediment/Sediment_161010_compilation_lumi.
         sheetNum=res-1
     data=import_xlsx(xlsxFileName=xlsxFileName,sheetNum=sheetNum,dataOnly=True, sanitize=False)
     priorityraw=import_xlsx(xlsxFileName=xlsxFileName, sheetNum=sheetNum+1, dataOnly=True, sanitize=False)
-    priority=[]
-    for row in priority:
+    for row in priorityraw:
         codepriority=row['Sample code']
-        res=codepriority.split(".")
-        if len(res)>1:
-            if res[0]=="E" and res[1]=="S":
-                priority.append(codepriority)
+        print(codepriority)
+        try:
+            res=codepriority.split(".")
+        except:
+            pass
+        else:
+            if len(res)>1:
+                if res[0]=="E" and res[1]=="S":
+                    sample=match(label="Sample", type="Sediment", code=codepriority)
+                    if len(sample)>0:
+                        props={"priority":1,"color":row["Colour"], "grainSize":row["Grain size"],"OtherComments":row["Other comments"]}
+                        sample[0].add(**props)
+                        sample[0].push()
     #todo add type of water in the sediment xlsx and import it
     sediments=[]
     for sample in data:
@@ -482,17 +539,17 @@ def insert_sediments(xlsxFileName="34 Sediment/Sediment_161010_compilation_lumi.
                     ['Sample code','code','g'],
                     ['Dry weight sample aluminium box+sample (g)','drySampleAndAluminiumWg','g'],
                     ['Weight of plastic bottle (g)','plasticBottleWg','g']]
-        
         unit='gram'
         unitabb='g'
         
         #TODO waterType
-        prio=(sample['Sample code'] in priority)
         seds=match(label="Sample", type="Sediment", code=sample['Sample code'])
         if len(seds)>0:
             seds=seds[0]
+            print("found "+ sample['Sample code'])
         else:
-            seds=Sample(type="Sediment")
+            seds=Sample(type="Sediment", code=sample['Sample code'])
+            print("Not found : "+sample['Sample code'])
         #seds.add(priority=prio)
         for ltv in labelsToVar:
             labels[ltv[0]]=ltv[1]

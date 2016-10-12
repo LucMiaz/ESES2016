@@ -105,6 +105,9 @@ if __name__=="__main__":
         #Fish sites
         F1=Site(code="F1",name="Fish site 1", lat=59.334508,lon=17.5396427, region="Mälaren", regionWater="Ref Mälaren")
         F2=Site(code="F2", name="Fish site 2", region="Baltic Sea", regionWater="Ref Baltic Sea")
+        Site(code="Control")
+        Site(code="Blank")
+        Site(code="Archive")
         
         insert_sites()
         insert_people()
