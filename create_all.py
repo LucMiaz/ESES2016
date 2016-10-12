@@ -105,9 +105,9 @@ if __name__=="__main__":
         #Fish sites
         F1=Site(code="F1",name="Fish site 1", lat=59.334508,lon=17.5396427, region="Mälaren", regionWater="Ref Mälaren")
         F2=Site(code="F2", name="Fish site 2", region="Baltic Sea", regionWater="Ref Baltic Sea")
-        Site(code="Control")
-        Site(code="Blank")
-        Site(code="Archive")
+        Site(code="Control", letter="S")
+        Site(code="Blank", letter="Z")
+        Site(code="Archive", region="Mälaren", letter="O")
         
         insert_sites()
         insert_people()
@@ -115,4 +115,8 @@ if __name__=="__main__":
         
         insert_ctd()
         insert_Hg()
+        
         insert_sediments()
+        2
+        insert_PFxx()
+        

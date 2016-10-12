@@ -163,67 +163,79 @@ def fill_PFxx(fileName, instrumentObj, folderName="", idCode="sample ID", date="
     data=import_xlsx(xlsxFileName=fileName, headersRow=1, sanitize=True)
     date="2016-09-20"
     for row in data:
-        ppcode=row['operator'].split(",")
-        ppcodecopy=[]
-        for pp in ppcode:
-            ppcodecopy.append(pp.lower().replace(" ",""))
-        ppcode=ppcodecopy
-        del row['operator']
-        obs=match(label="Observation", type="PFxx", ppcode=str(ppcode))
-        if len(obs)>0:
-            obs=obs[0]
-        else:
-            obs=Observation(type='PFxx', ppcode=str(ppcode),date=date)
+        if row[idCode]:
+            ppcode=row['operator'].split(",")
+            ppcodecopy=[]
             for pp in ppcode:
-                person=match(label="Person", initials=pp)
-                if len(person)>0:
-                    Relationship(obs, "BY", person[0])
-                else:
-                    print(pp + " not found")
-        units="ng/g"
-        sampleId=row[idCode]
-        sampleId=sanitize_sample_code(sampleId)
-        if not sampleId:
-            sampleId=row[idCode]
-            patternBlank= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
-            patternControl= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
-            if re.match(patternBlank, sampleId):
-                sample=match(label="Blank", site="Blank", code=sampleId)
-                if sample:
-                    if len(sample)>0:
-                        sample=sample[0]
-                else:
-                    sample=Sample(type="Blank", site="Blank", code=sampleId)
-                    site=match(label="Site",code="Blank")[0]
-                    Relationship(sample,"FROM", site)
-                siteCode="Blank"
-                typeSample="Blank"
-            elif re.match(patternControl, sampleId):
-                sample=match(label="Control", site="Control", code=sampleId)
-                if sample:
-                    if len(sample)>0:
-                        sample=sample[0]
-                else:
-                    sample=Sample(type="Control", site="Control", code=sampleId)
-                    site=match(label="Site",code="Control")[0]
-                    Relationship(sample,"FROM", site)
-                siteCode="Control"
-                typeSample="Control"
+                ppcodecopy.append(pp.lower().replace(" ",""))
+            ppcode=ppcodecopy
+            del row['operator']
+            obs=match(label="Observation", type="PFxx", ppcode=str(ppcode))
+            if len(obs)>0:
+                obs=obs[0]
             else:
-                sample=Sample(type='Sediment',site='Archive',code=row[idCode])
-                site=match(label="Site",code="Archive")[0]
-                Relationship(sample,"FROM", site)
-                siteCode="Archive"
-        elif len(sampleId.split("."))>1:
-            sample=match(label='Sample', code=sampleId)[0]
-            siteCode=int(sampleId.split(".")[2])
-        else:
-            print("ERRoR")
-            sample=Sample(type="ERROR", code=sampleId)
-        del row[idCode]
-        row['type']="PFxx"
-        row['units']=units
-        Relationship(obs,"OF",sample,**row)
+                obs=Observation(type='PFxx', ppcode=str(ppcode),date=date)
+                print("New observation ------------")
+                for pp in ppcode:
+                    person=match(label="Person", initials=pp)
+                    if len(person)>0:
+                        Relationship(obs, "BY", person[0])
+                    else:
+                        print(pp + " not found")
+            units="ng/g"
+            sampleId=row[idCode]
+            try:
+                print(sampleId)
+            except:
+                print("could not print id")
+            sampleId=sanitize_sample_code(sampleId)
+            if not sampleId:
+                sampleId=row[idCode]
+                patternBlank= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
+                patternControl= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
+                if re.match(patternBlank, sampleId):
+                    sample=match(label="Blank", site="Blank", code=sampleId)
+                    if sample:
+                        if len(sample)>0:
+                            sample=sample[0]
+                    else:
+                        sample=Sample(type="Blank", site="Blank", code=sampleId)
+                        site=match(label="Site",code="Blank")[0]
+                        Relationship(sample,"FROM", site)
+                elif re.match(patternControl, sampleId):
+                    sample=match(label="Control", site="Control", code=sampleId)
+                    if sample:
+                        if len(sample)>0:
+                            sample=sample[0]
+                    else:
+                        sample=Sample(type="Control", site="Control", code=sampleId)
+                        site=match(label="Site",code="Control")[0]
+                        Relationship(sample,"FROM", site)
+                else:
+                    sample=Sample(type='Sediment',site='Archive',code=row[idCode])
+                    site=match(label="Site",code="Archive")[0]
+                    Relationship(sample,"FROM", site)
+                    siteCode="Archive"
+            elif len(sampleId.split("."))>1:
+                
+                sample=match(label='Sample', code=sampleId)
+                if sample:
+                    if len(sample)>0:
+                        sample=sample[0]
+                    else:
+                        print("did not find " + sampleId)
+                        sample=Sample(type="ERROR", code=sampleId)
+                else:
+                    print("problem with "+sampleId)
+                    sample=Sample(type="ERROR", code=sampleId)
+                #siteCode=int(sampleId.split(".")[2])
+            else:
+                print("ERRoR")
+                sample=Sample(type="ERROR", code=sampleId)
+            del row[idCode]
+            row['type']="PFxx"
+            row['units']=units
+            Relationship(obs,"OF",sample,**row)
 
 
 def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", date=None, sheetNum=0):
