@@ -9,7 +9,7 @@ import py2neo as pyneo
 from classes import *
 import copy
 import urllib #for eniro api
-from fill_table import insert_sites, sheets_xlsx, import_xlsx, insert_people, data30, insert_ctd, insert_Hg, insert_sediments
+from fill_table import insert_sites, sheets_xlsx, import_xlsx, insert_people, data30, insert_ctd, insert_Hg, insert_sediments, insert_PFxx
 
 @data30
 def insert_codes():
@@ -107,7 +107,7 @@ if __name__=="__main__":
         F2=Site(code="F2", name="Fish site 2", region="Baltic Sea", regionWater="Ref Baltic Sea")
         Site(code="Control", letter="S")
         Site(code="Blank", letter="Z")
-        Site(code="Archive", region="Mälaren", letter="O")
+        Site(code="Archive", region="Mälaren", regionSed="Mälaren", letter="O")
         
         insert_sites()
         insert_people()
@@ -117,6 +117,6 @@ if __name__=="__main__":
         insert_Hg()
         
         insert_sediments()
-        2
+        
         insert_PFxx()
         

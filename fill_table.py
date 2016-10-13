@@ -141,7 +141,7 @@ def sanitize_sample_code(debut):
         elif not debut:
             debut=None
         else:##################################################################<---------------<-<-<-<-<-<
-            debut=None
+            pass
               
     return debut
 
@@ -153,7 +153,7 @@ def insert_PFxx():
     else:
         lc=Instrument(name="LC")
     folderName="39 PFxx"
-    fileName="PFXX_161011_compilation_FaBa.xlsx"
+    fileName="PFXX_161012_compilation_FaBa.xlsx"
     fill_PFxx(fileName=fileName, folderName=folderName, instrumentObj=lc) 
     
 
@@ -189,10 +189,11 @@ def fill_PFxx(fileName, instrumentObj, folderName="", idCode="sample ID", date="
             except:
                 print("could not print id")
             sampleId=sanitize_sample_code(sampleId)
-            if not sampleId:
-                sampleId=row[idCode]
-                patternBlank= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
-                patternControl= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
+            print("Sanitized"+str(sampleId))
+            patternBlank= re.compile('([B-b]lank)+(\s?)+([0-9])*\Z')
+            patternControl= re.compile('([C-c]ontrol)+(\s?)+([0-9])*\Z')
+            patternSample= re.compile('(E.[A-Z].)+([0-9]{2})+(.)+([0-9]{2})+([+]?[0-9]?[0-9]?)\Z')
+            if sampleId:
                 if re.match(patternBlank, sampleId):
                     sample=match(label="Blank", site="Blank", code=sampleId)
                     if sample:
@@ -211,31 +212,45 @@ def fill_PFxx(fileName, instrumentObj, folderName="", idCode="sample ID", date="
                         sample=Sample(type="Control", site="Control", code=sampleId)
                         site=match(label="Site",code="Control")[0]
                         Relationship(sample,"FROM", site)
+                elif re.match(patternSample,sampleId):
+                    
+                    sample=match(label='Sample', code=sampleId)
+                    if sample:
+                        if len(sample)>0:
+                            sample=sample[0]
+                        else:
+                            print("did not find " + sampleId)
+                            sample=Sample(type="ERROR", code=sampleId)
+                    else:
+                        print("problem with "+sampleId)
+                        sample=Sample(type="ERROR", code=sampleId)
+                    #siteCode=int(sampleId.split(".")[2])
                 else:
-                    sample=Sample(type='Sediment',site='Archive',code=row[idCode])
-                    site=match(label="Site",code="Archive")[0]
-                    Relationship(sample,"FROM", site)
-                    siteCode="Archive"
-            elif len(sampleId.split("."))>1:
-                
-                sample=match(label='Sample', code=sampleId)
-                if sample:
+                    sample=match(label="Sample", type="Sediment", code=row[idCode])
                     if len(sample)>0:
                         sample=sample[0]
                     else:
-                        print("did not find " + sampleId)
-                        sample=Sample(type="ERROR", code=sampleId)
-                else:
-                    print("problem with "+sampleId)
-                    sample=Sample(type="ERROR", code=sampleId)
-                #siteCode=int(sampleId.split(".")[2])
-            else:
-                print("ERRoR")
-                sample=Sample(type="ERROR", code=sampleId)
+                        sample=Sample(type='Sediment',site='Archive',code=row[idCode], siteCode="Archive")
+                        site=match(label="Site",code="Archive")[0]
+                        Relationship(sample,"FROM", site)
+                        print("Created rel for "+row[idCode])
+
             del row[idCode]
             row['type']="PFxx"
             row['units']=units
-            Relationship(obs,"OF",sample,**row)
+            rel=match(label="OF", relationshipNode=True, target=sample, origin=obs)
+            if rel:
+                if len(rel)>0:
+                    print('rel found')
+                    rel=rel[0]
+                    rel.add(**row)
+                    rel.push()
+                else:
+                    print('no match for relationship')
+                    Relationship(obs,"OF",sample,**row)
+            else:
+                print('match :none')
+                Relationship(obs,"OF",sample,**row)
 
 
 def insert_data_from_file(fileName, relationshipProps, instrumentToValue, observationObj, headersRow=0,folderName="", idLabel="Sample Id", date=None, sheetNum=0):
